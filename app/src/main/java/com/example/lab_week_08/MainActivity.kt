@@ -1,47 +1,75 @@
 package com.example.lab_week_08
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.lab_week_08.ui.theme.LAB_WEEK_08Theme
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.work.Constraints
+import androidx.work.Data
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkManager
+import com.example.lab_week_08.worker.FirstWorker
+import com.example.lab_week_08.worker.SecondWorker
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+
+    // Correctly initialize WorkManager using lazy delegation and applicationContext
+    private val workManager by lazy {
+        WorkManager.getInstance(applicationContext)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            LAB_WEEK_08Theme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+        setContentView(R.layout.activity_main)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
+
+        val networkConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val id = "001"
+
+        val firstRequest = OneTimeWorkRequest.Builder(FirstWorker::class.java)
+            .setConstraints(networkConstraints)
+            .setInputData(getIdInputData(FirstWorker.INPUT_DATA_ID, id))
+            .build()
+
+        val secondRequest = OneTimeWorkRequest.Builder(SecondWorker::class.java)
+            .setConstraints(networkConstraints)
+            .setInputData(getIdInputData(SecondWorker.INPUT_DATA_ID, id))
+            .build()
+
+        workManager.beginWith(firstRequest)
+            .then(secondRequest)
+            .enqueue()
+
+        // Observe the work and show a toast when it's finished
+        workManager.getWorkInfoByIdLiveData(firstRequest.id).observe(this) { info ->
+            if (info != null && info.state.isFinished) {
+                showResult("First process is done")
+            }
+        }
+
+        workManager.getWorkInfoByIdLiveData(secondRequest.id).observe(this) { info ->
+            if (info != null && info.state.isFinished) {
+                showResult("Second process is done")
             }
         }
     }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
+    private fun getIdInputData(idKey: String, idValue: String): Data {
+        return Data.Builder()
+            .putString(idKey, idValue)
+            .build()
+    }
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    LAB_WEEK_08Theme {
-        Greeting("Android")
+    private fun showResult(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }
